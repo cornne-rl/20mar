@@ -1,94 +1,98 @@
 import streamlit as st
 import pandas as pd
-import time
 
-# ตั้งค่าหน้าเว็บ
-st.set_page_config(page_title="โหวตที่สุดในรุ่น 🎓", page_icon="🎓", layout="centered")
+# --- การตั้งค่าเบื้องต้น ---
+st.set_page_config(page_title="กิจกรรมกระจกเงาใจ", layout="wide")
 
-# --- ส่วนของการจัดการข้อมูล ---
-if 'votes' not in st.session_state:
-    st.session_state.votes = {}
-if 'total_voters' not in st.session_state:
-    st.session_state.total_voters = 0
-if 'voted_names' not in st.session_state:
-    st.session_state.voted_names = []
+# จำลองฐานข้อมูล (ในใช้งานจริงควรเชื่อมต่อ Google Sheets หรือ SQL)
+# สำหรับตัวอย่างนี้จะใช้ st.cache_resource เพื่อจำลองฐานข้อมูลที่ทุกคนเข้าถึงได้ในเครื่องเดียวกัน
+if 'db' not in st.session_state:
+    st.session_state.db = pd.DataFrame(columns=['Nickname'] + [f'Q{i}' for i in range(1, 11)])
 
-# รายชื่อรางวัล
-awards = [
-    "🌟 เพื่อนที่พึ่งพาได้มากที่สุด",
-    "🤣 ตัวตึงเน้นฮาประจำห้อง",
-    "🏃‍♂️ นักสู้ (มาสายแต่มานะ)",
-    "📚 ว่าที่ด็อกเตอร์คนต่อไป"
+if 'admin_unlock' not in st.session_state:
+    st.session_state.admin_unlock = False # ครูเป็นคนคุมปุ่มนี้
+
+# --- ส่วนของครู (Admin Control) ---
+with st.sidebar:
+    st.header("👑 ส่วนของคุณครู")
+    password = st.text_input("รหัสผ่านครู", type="password")
+    if password == "1234": # ตั้งรหัสผ่านง่ายๆ
+        if st.button("🚀 เปิดหน้า Dashboard ให้เด็กๆ"):
+            st.session_state.admin_unlock = True
+            st.success("เปิดระบบ Dashboard แล้ว!")
+        if st.button("🔄 ล้างข้อมูลทั้งหมด"):
+            st.session_state.db = pd.DataFrame(columns=['Nickname'] + [f'Q{i}' for i in range(1, 11)])
+            st.session_state.admin_unlock = False
+            st.rerun()
+
+# --- ส่วนของนักเรียน ---
+questions = [
+    "1. เมื่อพูดถึง 'พลังบวก' (Positive Energy) ฉันนึกถึง...",
+    "2. เมื่อพูดถึง 'นักแก้ปัญหา' ฉันนึกถึง...",
+    "3. เมื่อพูดถึง 'ผู้ฟังที่ดีที่สุด' ฉันนึกถึง...",
+    "4. เมื่อพูดถึง 'ความใจดี' ฉันนึกถึง...",
+    "5. เมื่อพูดถึง 'สีสันของกลุ่ม' ฉันนึกถึง...",
+    "6. เมื่อพูดถึง 'แรงบันดาลใจ' ฉันนึกถึง...",
+    "7. เมื่อพูดถึง 'ความนิ่งสยบความเคลื่อนไหว' ฉันนึกถึง...",
+    "8. เมื่อพูดถึง 'เจ้าพ่อ/เจ้าแม่ความจำ' ฉันนึกถึง...",
+    "9. เมื่อพูดถึง 'ความซื่อสัตย์และจริงใจ' ฉันนึกถึง...",
+    "10. เมื่อพูดถึง 'ความกล้าหาญ' ฉันนึกถึง..."
 ]
 
-# --- Sidebar สำหรับคุณครู (ซ่อนไว้) ---
-with st.sidebar:
-    st.header("⚙️ เมนูคุณครู")
-    teacher_pw = st.text_input("รหัสผ่านครู", type="password")
+if not st.session_state.admin_unlock:
+    st.title("📝 กิจกรรม: ใครกันนะ?")
     
-    if teacher_pw == "1234": # ครูเปลี่ยนรหัสตรงนี้ได้ครับ
-        input_names = st.text_area("ใส่รายชื่อนักเรียน (คั่นด้วย ,)", 
-                                  value="สมชาย, สมหญิง, มานะ, มานี")
-        students = [s.strip() for s in input_names.split(",") if s.strip()]
+    # ขั้นตอนที่ 1: พิมพ์ชื่อเล่น
+    if 'my_nickname' not in st.session_state:
+        nickname = st.text_input("ก่อนเริ่ม... บอกชื่อเล่นของคุณหน่อยจ้า:", key="nick_input")
+        if st.button("ตกลง"):
+            if nickname:
+                st.session_state.my_nickname = nickname
+                st.session_state.current_q = 0
+                st.session_state.my_answers = []
+                st.rerun()
+    
+    # ขั้นตอนที่ 2: ตอบทีละข้อ
+    elif st.session_state.current_q < 10:
+        q_idx = st.session_state.current_q
+        st.subheader(f"สวัสดีจ๊ะ {st.session_state.my_nickname} 😊")
+        st.write(f"ข้อที่ {q_idx + 1} จาก 10")
         
-        if st.button("✅ อัปเดตรายชื่อ/เริ่มใหม่"):
-            st.session_state.votes = {award: {name: 0 for name in students} for award in awards}
-            st.session_state.total_voters = 0
-            st.session_state.voted_names = []
-            st.success("รีเซ็ตระบบเรียบร้อย!")
-    else:
-        st.info("กรุณาใส่รหัสผ่านเพื่อตั้งค่า")
-        students = ["กรุณาให้ครูตั้งค่ารายชื่อ"]
-
-# --- หน้าหลัก (ที่เด็กๆ เห็น) ---
-st.title("🎓 กิจกรรมปัจฉิมนิเทศ")
-st.markdown(f"### 🗳️ ตอนนี้โหวตแล้ว: `{st.session_state.total_voters}` คน")
-
-# ส่วนของการโหวต
-with st.container():
-    with st.form("voting_form"):
-        st.write("---")
-        voter_name = st.text_input("ชื่อเล่นของคุณ (เพื่อยืนยันตัวตน)")
+        answer = st.text_input(questions[q_idx], key=f"ans_{q_idx}")
         
-        selected_votes = {}
-        for award in awards:
-            selected_votes[award] = st.selectbox(f"โหวตให้ใคร: {award}", students, key=f"v_{award}")
-        
-        submitted = st.form_submit_button("🗳️ ส่งผลโหวตลงหีบ")
-        
-        if submitted:
-            if not voter_name:
-                st.warning("ใส่ชื่อตัวเองหน่อยนะจ๊ะ")
-            elif voter_name in st.session_state.voted_names:
-                st.error("คุณโหวตไปแล้วนะจ๊ะ แบ่งให้เพื่อนคนอื่นบ้าง!")
-            else:
-                # บันทึกคะแนน
-                for award, student in selected_votes.items():
-                    if award in st.session_state.votes:
-                        st.session_state.votes[award][student] += 1
+        if st.button("ส่งคำตอบ"):
+            if answer:
+                st.session_state.my_answers.append(answer)
+                st.session_state.current_q += 1
                 
-                st.session_state.total_voters += 1
-                st.session_state.voted_names.append(voter_name)
-                st.balloons() # เอฟเฟกต์ลูกโป่งส่วนตัวของเด็ก
-                st.success("บันทึกคะแนนเรียบร้อย! รอดูผลพร้อมกันบนจอนะ")
+                # ถ้าตอบครบ 10 ข้อ ให้บันทึกลง DB
+                if st.session_state.current_q == 10:
+                    new_data = [st.session_state.my_nickname] + st.session_state.my_answers
+                    # บันทึกข้อมูล (ในที่นี้คือ append ลง dataframe จำลอง)
+                    temp_df = pd.DataFrame([new_data], columns=st.session_state.db.columns)
+                    st.session_state.db = pd.concat([st.session_state.db, temp_df], ignore_index=True)
+                
+                st.rerun()
+            else:
+                st.warning("กรุณาพิมพ์ชื่อเพื่อนก่อนนะ")
 
-# --- ส่วนการแสดงผล (ต้องใส่รหัสครูถึงจะกดดูได้) ---
-st.write("---")
-if teacher_pw == "1234":
-    if st.checkbox("📢 เปิดหน้าจอประกาศผล (โชว์บนโปรเจกเตอร์)"):
-        st.header("🏆 ผลการโหวต 'ที่สุดในรุ่น'")
-        st.snow() # เอฟเฟกต์หิมะฉลองบนจอใหญ่
-        
-        for award in awards:
-            with st.expander(f"คลิกเพื่อดูผู้ชนะรางวัล: {award}", expanded=False):
-                current_data = st.session_state.votes.get(award, {})
-                if current_data:
-                    df = pd.DataFrame(current_data.items(), columns=['ชื่อเพื่อน', 'คะแนน'])
-                    # เรียงจากมากไปน้อย
-                    df = df.sort_values(by='คะแนน', ascending=False)
-                    st.bar_chart(df.set_index('ชื่อเพื่อน'))
-                    
-                    winner = df.iloc[0]['ชื่อเพื่อน']
-                    winning_score = df.iloc[0]['คะแนน']
-                    if winning_score > 0:
-                        st.success(f"🎊 ยินดีกับ **{winner}** ได้ไปทั้งหมด {winning_score} คะแนน!")
+    else:
+        st.success("ส่งคำตอบครบแล้วจ้า! 🎉")
+        st.info("💡 ตอนนี้ข้อมูลของคุณถูกเก็บไว้แล้ว รอคุณครูเปิดหน้า Dashboard พร้อมกันนะ...")
+
+# --- ส่วน Dashboard (จะปรากฏเมื่อครูกดปุ่มเท่านั้น) ---
+else:
+    st.title("📊 Dashboard สรุปความประทับใจ")
+    st.balloons()
+    
+    if st.session_state.db.empty:
+        st.write("ยังไม่มีข้อมูลส่งเข้ามาเลย...")
+    else:
+        # แสดงผลเป็นตารางหรือการ์ด
+        for index, row in st.session_state.db.iterrows():
+            with st.expander(f"🌟 ความประทับใจจาก: {row['Nickname']}"):
+                cols = st.columns(2)
+                for i in range(1, 11):
+                    target_col = cols[0] if i <= 5 else cols[1]
+                    target_col.write(f"**{questions[i-1].split('.')[1]}**")
+                    target_col.info(f"👉 {row[f'Q{i}']}")
